@@ -5,17 +5,8 @@ import os
 import numpy as np
 import re
 import pandas as pd
-from PIL import Image
+from utility import *
 
-def applyMask(input, mask):
-    masked = input
-    masked[np.where(mask == 0)] = 0
-    return masked
-
-def createAndSaveImage(image_to_save, output_name):
-    savingImage = Image.fromarray(image_to_save, "RGB")
-    savingImage.save(output_name)
-    return True
 #TODO add args
 def main():
     #Load training and test data
