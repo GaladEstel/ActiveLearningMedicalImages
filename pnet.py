@@ -19,7 +19,7 @@ def conv_block(layer_in, n_filters, n_conv, dilated_rate):
 
 def get_pnetcls(patch_size):
     # define model input
-    visible = Input(shape=(patch_size, patch_size, 1))
+    visible = Input(shape=(patch_size, patch_size, 1)) #Why there is a 1 for the third dimension?
     # add block1
     layer1 = conv_block(visible, 64, 2, 1)
     # add block2

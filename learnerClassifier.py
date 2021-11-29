@@ -1,18 +1,19 @@
-class learner:
-    def __init__(self, X, y, estimator, query_strategy):
-        self.estimator = estimator
-        self.X = X
-        self.y = y
-        self.query_strategy = query_strategy
+import keras.callbacks
 
-    #called several times incrementing the training data with the new data
-    def teach(self):
-        pass
+from pnet import get_pnetcls
 
-    #add newly labeled instances to the dataset
-    def add_training(self, X, y):
-        pass
+def teach_model(train_dataset, test_dataset, patch_size):
+    #create a small dataset
+    model = get_pnetcls(patch_size)
+    checkpoint = keras.callbacks.ModelCheckpoint(
+        "Active_learning_model", save_best_only=True, verbose=1)
+    early_stopping = keras.callbacks.EarlyStopping(patience=4, verbose=1)
 
-    #compute the uncertainty and give back the indices of the new data with highest uncertainty
-    def query(self):
-        pass
+    print("Starting to train")
+
+    history = model.fit(
+        train_dataset.cache().shuffle()
+        #TO BE CONTINUED
+    )
+
+    pass
