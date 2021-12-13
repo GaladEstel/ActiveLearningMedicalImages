@@ -4,6 +4,11 @@ from pnet import get_pnetcls
 from keras.optimizer_v1 import SGD
 import numpy as np
 from sklearn.model_selection import train_test_split
+import pandas as pd
+from utility import *
+from sklearn.preprocessing import LabelBinarizer
+import pickle
+import re
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -12,25 +17,46 @@ def append_history(losses, val_losses, accuracy, val_accuracy, history):
     val_accuracy = val_accuracy + history.history["val_binary_accuracy"]
     return losses, val_losses, accuracy, val_accuracy
 
-def train_whole_dataset(train_dataset, test_dataset, patch_size):
-    #divide the dataset in training validation and test set
-    losses, val_losses, accuracies, val_accuracies = [], [], [], []
+def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
+
+    unfiltered_filelist = getAllFiles(patch_dir)
+    vessel_list = [item for item in unfiltered_filelist]
+    train_X = []
+    train_y = []
+    for el, en in enumerate(vessel_list):
+        train_X.append(load_to_numpy(en))
+        if "no_vessel" in en:
+            train_y.append(0)
+        else:
+            train_y.append(1)
+    lb = LabelBinarizer()
+    train_y = lb.fit_transform(train_y)
+    train_X = np.array(train_X, dtype=np.float64)
+    print('Shape of train_X, train_y: ',train_X.shape, len(train_y))
+    # normalize training set
+    mean1 = np.mean(train_X)  # mean for data centering
+    std1 = np.std(train_X)  # std for data normalization
+    train_X -= mean1
+    train_X /= std1
+    # CREATING MODEL
+    patch_size = 32
+
     model = get_pnetcls(patch_size)
-    checkpoint = keras.callbacks.ModelCheckpoint(
-        "Active_learning_model", save_best_only=True, verbose=1)
-    early_stopping = keras.callbacks.EarlyStopping(patience=4, verbose=1)
 
-    print("Starting to train... ")
+    # train model
+    print('Training model...')
+    model.fit(train_X, train_y, validation_split=0.2, epochs=10, batch_size=64)
+    # saving model
+    print('Saving model to ', model_filepath)
+    model.save(model_filepath)
+    # saving mean and std
+    print('Saving params to ', train_metadata_filepath)
+    results = {'mean_train': mean1,'std_train':std1}
+    with open(train_metadata_filepath, 'wb') as handle:
+        pickle.dump(results, handle)
+    print()
+    print('DONE')
 
-    history = model.fit(
-        train_dataset.cache().shuffle(300).batch(1),
-        validation_split=0.1,
-        epochs=20,
-        callbacks=[
-            checkpoint,
-            keras.callbacks.EarlyStopping(patience=4, verbose=3),
-        ],
-    )
 
 #Decide if to train only the classifier (I know the labels and just see the accuracy
 #of the classifier or do the classifiationa and wait for the segmentation)

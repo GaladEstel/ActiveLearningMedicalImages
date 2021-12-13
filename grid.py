@@ -53,14 +53,16 @@ def main():
 
                 #I generate the labels to automatize the work of the oracle
                 gridToSave = label_mat[patch_start_x: patch_end_x, patch_start_y:patch_end_y]
+                '''
+                #If you want to have the different patches (with and without vessels in different paths)
                 if 255 in gridToSave:
-                    label=1
+                    label="vessel"
                     path_to_save = saved_path + "class_1/"
                 else:
-                    label=0
+                    label="no_vessel"
                     path_to_save = saved_path + "class_0/"
-
-                createAndSaveImage(toSave, path_to_save + f"{label}_{m}_{n}_{j[:-3]}jpg")
+                '''
+                createAndSaveImage(toSave, saved_path + f"{label}_{m}_{n}_{j[:-3]}jpg")
 
 
         createAndSaveImage(prob_mat, grid_path + j)

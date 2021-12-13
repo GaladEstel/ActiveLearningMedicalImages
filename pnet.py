@@ -19,7 +19,7 @@ def conv_block(layer_in, n_filters, n_conv, dilated_rate):
 
 def get_pnetcls(patch_size):
     # define model input
-    visible = Input(shape=(patch_size, patch_size, 1)) #Why there is a 1 for the third dimension?
+    visible = Input(shape=(patch_size, patch_size, 3)) #Why there is a 1 for the third dimension?
     # add block1
     layer1 = conv_block(visible, 64, 2, 1)
     # add block2
@@ -47,8 +47,7 @@ def get_pnetcls(patch_size):
     # create model
     model = Model(inputs=visible, outputs=layer_out)
     # compile model
-    opt = SGD(lr=0.01, momentum=0.9)
-    model.compile(optimizer=opt, loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer="SGD", loss='binary_crossentropy', metrics=['accuracy'])
     print('pnetcls compiled.')
     # summarize model
     model.summary()
