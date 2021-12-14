@@ -96,7 +96,7 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
         model.save(model_filepath)
         # saving mean and std
         print('Saving params to ', train_metadata_filepath)
-        results = {'mean_train': mean1, 'std_train':std1}
+        results = {'mean_train': mean1, 'std_train': std1}
         with open(train_metadata_filepath, 'wb') as handle:
             pickle.dump(results, handle)
         print()

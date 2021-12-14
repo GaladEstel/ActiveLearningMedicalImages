@@ -23,7 +23,7 @@ def main():
 
     '''
 
-    train_whole_dataset(train_input_path, trained_model_path, "/train/model/whole_train")
+    train_whole_dataset(train_input_path, trained_model_path, "./train/model/results.pkl")
 
 
     print("End")
