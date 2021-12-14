@@ -9,8 +9,10 @@ from utility import *
 from sklearn.preprocessing import LabelBinarizer
 import pickle
 import re
-from tensorflow.keras import layers
+from tensorflow.keras import layers, models
 import tensorflow as tf
+from keras import backend as K
+from verySimpleModel import *
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -20,6 +22,26 @@ def append_history(losses, val_losses, accuracy, val_accuracy, history):
     return losses, val_losses, accuracy, val_accuracy
 
 def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
+
+
+    tf.debugging.set_log_device_placement(True)
+    '''
+    RUN on GPU NOT WORKING
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
+        try:
+            tf.config.set_logical_device_configuration(
+                gpus[0],
+                [tf.config.LogicalDeviceConfiguration(memory_limit=2048)])
+            logical_gpus = tf.config.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Virtual devices must be set before GPUs have been initialized
+            print(e)
+
+    '''
+
 
     unfiltered_filelist = getAllFiles(patch_dir)
     vessel_list = [item for item in unfiltered_filelist]
@@ -43,7 +65,7 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
     # CREATING MODEL
     patch_size = 32
 
-    model = get_pnetcls(patch_size)
+    model = get_very_simple_model(patch_size)
     '''
     DATA AUGMENTATION NOT WORKING
     # Create a data augmentation stage with horizontal flipping, rotations, zooms
@@ -57,20 +79,28 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
     train_X = tf.data.Dataset.from_tensor_slices(train_X, train_y)
     train_X = train_X.batch(16).map(lambda x, y: (data_augmentation(x), y))
     '''
+    with tf.device('/device:CPU:0'):
+        train_X = tf.convert_to_tensor(train_X)
+        train_y = tf.convert_to_tensor(train_y)
 
-    # train model
-    print('Training model...')
-    model.fit(train_X, train_y, validation_split=0.2, epochs=10, batch_size=64)
-    # saving model
-    print('Saving model to ', model_filepath)
-    model.save(model_filepath)
-    # saving mean and std
-    print('Saving params to ', train_metadata_filepath)
-    results = {'mean_train': mean1,'std_train':std1}
-    with open(train_metadata_filepath, 'wb') as handle:
-        pickle.dump(results, handle)
-    print()
-    print('DONE')
+        # train model
+        print('Training model...')
+
+        #CPU
+        # model.fit(train_X, train_y, epochs=10)
+
+        #GPU
+        model.fit(train_X, train_y, epochs=10, batch_size=64)
+        # saving model
+        print('Saving model to ', model_filepath)
+        model.save(model_filepath)
+        # saving mean and std
+        print('Saving params to ', train_metadata_filepath)
+        results = {'mean_train': mean1, 'std_train':std1}
+        with open(train_metadata_filepath, 'wb') as handle:
+            pickle.dump(results, handle)
+        print()
+        print('DONE')
 
 
 #Decide if to train only the classifier (I know the labels and just see the accuracy
