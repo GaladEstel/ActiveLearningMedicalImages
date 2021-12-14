@@ -9,6 +9,8 @@ from utility import *
 from sklearn.preprocessing import LabelBinarizer
 import pickle
 import re
+from tensorflow.keras import layers
+import tensorflow as tf
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -42,6 +44,19 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
     patch_size = 32
 
     model = get_pnetcls(patch_size)
+    '''
+    DATA AUGMENTATION NOT WORKING
+    # Create a data augmentation stage with horizontal flipping, rotations, zooms
+    data_augmentation = keras.Sequential(
+        [
+            layers.RandomFlip("horizontal"),
+            layers.RandomRotation(0.1),
+            layers.RandomZoom(0.1),
+        ]
+    )
+    train_X = tf.data.Dataset.from_tensor_slices(train_X, train_y)
+    train_X = train_X.batch(16).map(lambda x, y: (data_augmentation(x), y))
+    '''
 
     # train model
     print('Training model...')
