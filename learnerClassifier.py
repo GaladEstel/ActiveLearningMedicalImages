@@ -14,7 +14,7 @@ import tensorflow as tf
 from keras import backend as K
 from verySimpleModel import *
 from sklearn.metrics import f1_score
-
+from sklearn.model_selection import train_test_split
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -23,8 +23,9 @@ def append_history(losses, val_losses, accuracy, val_accuracy, history):
     val_accuracy = val_accuracy + history.history["val_accuracy"]
     return losses, val_losses, accuracy, val_accuracy
 
-def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
 
+def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
+    patch_size = 32
 
     #tf.debugging.set_log_device_placement(True)
     '''
@@ -65,9 +66,9 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
     train_X -= mean1
     train_X /= std1
     # CREATING MODEL
-    patch_size = 32
 
-    model = get_very_simple_model(patch_size)
+
+    model = get_pnetcls(patch_size)
     '''
     DATA AUGMENTATION NOT WORKING
     # Create a data augmentation stage with horizontal flipping, rotations, zooms
@@ -81,9 +82,12 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
     train_X = tf.data.Dataset.from_tensor_slices(train_X, train_y)
     train_X = train_X.batch(16).map(lambda x, y: (data_augmentation(x), y))
     '''
+    train_X, test_X, train_y, test_y = train_test_split(train_X, train_y, test_size=0.2, shuffle=True)
     with tf.device('/device:CPU:0'):
-        train_X = tf.convert_to_tensor(train_X)
-        train_y = tf.convert_to_tensor(train_y)
+        #train_X = tf.convert_to_tensor(train_X)
+        #train_y = tf.convert_to_tensor(train_y)
+        #test_X = tf.convert_to_tensor(test_X)
+        #test_y = tf.convert_to_tensor(test_y)
 
         # train model
         print('Training model...')
@@ -96,6 +100,20 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
         # saving model
         print('Saving model to ', model_filepath)
         model.save(model_filepath)
+
+        with tf.device("/device:CPU:0"):
+            predictions = model.predict(test_X)
+        rounded = np.where(np.greater(predictions, 0.5), 1, 0)
+
+        def accuracy(y_pred, y):
+            return np.sum(y_pred == y)/len(y)
+
+        accuracy_test = accuracy(y_pred=rounded, y=test_y)
+        f1_score_test = f1_score(y_true=test_y, y_pred=rounded)
+
+        print(f"Accuracy on test: {accuracy_test}")
+        print(f"f1 on test: {f1_score_test}")
+
         # saving mean and std
         print('Saving params to ', train_metadata_filepath)
         results = {'mean_train': mean1, 'std_train': std1}
@@ -105,10 +123,11 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
         print('DONE')
 
 
+
 #Decide if to train only the classifier (I know the labels and just see the accuracy
 #of the classifier or do the classifiationa and wait for the segmentation)
 def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteration):
-
+    patch_size = 32
     #loading labelled patches
     unfiltered_filelist = getAllFiles(patch_dir)
     vessel_list = [item for item in unfiltered_filelist]
@@ -130,15 +149,17 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
     train_X -= mean1
     train_X /= std1
     # CREATING MODEL
-    patch_size = 32
 
-    def get_n_indices(percentage):
+
+    def get_n_indices(percentage, train_X):
         #extract a small dataset to give initial training
         initial_size = int(percentage*len(train_X))
         return np.random.randint(0, len(train_X), size=initial_size)
 
-    initial_indices = get_n_indices(0.01)
+
     all_indices = np.array([i for i in range(len(train_X))])
+    train_X, test_X, train_y, test_y = train_test_split(train_X, train_y, test_size=0.2)
+    initial_indices = get_n_indices(0.2, train_X)
 
     initial_train_X = train_X[initial_indices]
     initial_train_y = train_y[initial_indices]
@@ -146,7 +167,7 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
 
     losses, val_losses, accuracies, val_accuracies = [], [], [], []
 
-    model = get_very_simple_model(patch_size)
+    model = get_pnetcls(patch_size)
     checkpoint = keras.callbacks.ModelCheckpoint(
         "Active_learning_model", save_best_only=True, verbose=1)
     early_stopping = keras.callbacks.EarlyStopping(patience=4, verbose=1)
@@ -175,8 +196,8 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
         for el in all_indices:
             if el not in training_indices:
                 not_training_indices.append(el)
-        test_X = train_X[not_training_indices]
-        test_y = train_y[not_training_indices]
+        #test_X = train_X[not_training_indices]
+        #test_y = train_y[not_training_indices]
         with tf.device("/device:CPU:0"):
             predictions = model.predict(test_X)
         rounded = np.where(np.greater(predictions, 0.5), 1, 0)

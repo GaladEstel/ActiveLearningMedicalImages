@@ -61,12 +61,15 @@ def main():
                 #If you want to have the different patches (with and without vessels in different paths)
                 if 255 in gridToSave:
                     label="vessel"
+
                     path_to_save = saved_path + "class_1/"
                 else:
                     label="no_vessel"
                     path_to_save = saved_path + "class_0/"
 
-                createAndSaveImage(toSave, saved_path + f"{label}_{m}_{n}_{j[:-3]}jpg")
+                #If you want to remove all the images which are totally black
+                if np.max(toSave) != 0:
+                    createAndSaveImage(toSave, saved_path + f"{label}_{m}_{n}_{j[:-3]}jpg")
 
 
         createAndSaveImage(prob_mat, grid_path + j)
