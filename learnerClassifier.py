@@ -13,13 +13,8 @@ from tensorflow.keras import layers, models
 import tensorflow as tf
 from keras import backend as K
 from verySimpleModel import *
-<<<<<<< HEAD
 from pathlib import Path
-
-=======
-from sklearn.metrics import f1_score
-from sklearn.model_selection import train_test_split
->>>>>>> 0e8e304faacb33f81f96930fc984e1541ef9bf8b
+from sklearn.metrics import f1_score 
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -32,11 +27,7 @@ def append_history(losses, val_losses, accuracy, val_accuracy, history):
 def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
     patch_size = 32
 
-<<<<<<< HEAD
     # tf.debugging.set_log_device_placement(True)
-=======
-    #tf.debugging.set_log_device_placement(True)
->>>>>>> 0e8e304faacb33f81f96930fc984e1541ef9bf8b
     '''
     RUN on GPU NOT WORKING
     gpus = tf.config.list_physical_devices('GPU')
@@ -100,38 +91,14 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
 
         # train model
         print('Training model...')
-<<<<<<< HEAD
         model.fit(train_X, train_y, epochs=10, batch_size=64)
 
-=======
-
-        #CPU
-        # model.fit(train_X, train_y, epochs=10)
-
-        #GPU
-        model.fit(train_X, train_y, validation_split=0.2, epochs=20, batch_size=32)
->>>>>>> 0e8e304faacb33f81f96930fc984e1541ef9bf8b
         # saving model
         print('Saving model to ', model_filepath)
         model.save(model_filepath)
 
-<<<<<<< HEAD
         # Create folders if they don't exist already
         Path('train/patched_images/').mkdir(parents=True, exist_ok=True)
-=======
-        with tf.device("/device:CPU:0"):
-            predictions = model.predict(test_X)
-        rounded = np.where(np.greater(predictions, 0.5), 1, 0)
-
-        def accuracy(y_pred, y):
-            return np.sum(y_pred == y)/len(y)
-
-        accuracy_test = accuracy(y_pred=rounded, y=test_y)
-        f1_score_test = f1_score(y_true=test_y, y_pred=rounded)
-
-        print(f"Accuracy on test: {accuracy_test}")
-        print(f"f1 on test: {f1_score_test}")
->>>>>>> 0e8e304faacb33f81f96930fc984e1541ef9bf8b
 
         # saving mean and std
         print('Saving params to ', train_metadata_filepath)
