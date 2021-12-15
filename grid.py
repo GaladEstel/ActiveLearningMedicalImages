@@ -8,13 +8,13 @@ import imageio as io
 def main():
     masked_train_path = "train/masked_train/"
     masked_test_path = "test/masked_test/"
-    label_path = "train/1st_manual/"
+    label_path = "train/mask/"
     patch_size = 32
     saved_path = "train/patched_images/"
     grid_path = "train/images_with_grid/"
     input_train_images = [item for item in os.listdir(masked_train_path) if re.search("_training", item)]
     #input_test_images = [item for item in os.listdir(masked_test_path) if re.search("_test", item)]
-    mask_train_images = [item for item in os.listdir(label_path) if re.search("_manual1", item)]
+    mask_train_images = [item for item in os.listdir(label_path) if re.search("_training", item)]
     for i, j in enumerate(input_train_images):
         image = io.imread(masked_train_path + j)
         label_image = io.imread(label_path + mask_train_images[i])
