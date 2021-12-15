@@ -13,6 +13,8 @@ from tensorflow.keras import layers, models
 import tensorflow as tf
 from keras import backend as K
 from verySimpleModel import *
+from pathlib import Path
+
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -24,7 +26,7 @@ def append_history(losses, val_losses, accuracy, val_accuracy, history):
 def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
 
 
-    tf.debugging.set_log_device_placement(True)
+    # tf.debugging.set_log_device_placement(True)
     '''
     RUN on GPU NOT WORKING
     gpus = tf.config.list_physical_devices('GPU')
@@ -85,19 +87,23 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
 
         # train model
         print('Training model...')
-
-        #CPU
-        # model.fit(train_X, train_y, epochs=10)
-
-        #GPU
         model.fit(train_X, train_y, epochs=10, batch_size=64)
+
         # saving model
         print('Saving model to ', model_filepath)
         model.save(model_filepath)
+
+        # Create folders if they don't exist already
+        Path('train/patched_images/').mkdir(parents=True, exist_ok=True)
+
         # saving mean and std
         print('Saving params to ', train_metadata_filepath)
         results = {'mean_train': mean1, 'std_train': std1}
-        with open(train_metadata_filepath, 'wb') as handle:
+
+        # Create folder if they don't exist already
+        Path(train_metadata_filepath).mkdir(parents=True, exist_ok=True)
+
+        with open(f"{train_metadata_filepath}/result.pkl", 'wb') as handle:
             pickle.dump(results, handle)
         print()
         print('DONE')

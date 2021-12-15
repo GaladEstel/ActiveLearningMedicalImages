@@ -6,7 +6,8 @@ from utility import *
 
 def main():
     train_input_path = "train/patched_images/"
-    trained_model_path ="model"
+    trained_model_path = "model"
+    train_metadata_filepath = "./train/model"
     '''
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
@@ -23,7 +24,7 @@ def main():
 
     '''
 
-    train_whole_dataset(train_input_path, trained_model_path, "./train/model/results.pkl")
+    train_whole_dataset(train_input_path, trained_model_path, train_metadata_filepath)
 
 
     print("End")
