@@ -14,7 +14,8 @@ import tensorflow as tf
 from keras import backend as K
 from verySimpleModel import *
 from pathlib import Path
-from sklearn.metrics import f1_score 
+from sklearn.metrics import f1_score
+from sklearn.model_selection import train_test_split
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -99,6 +100,20 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
 
         # Create folders if they don't exist already
         Path('train/patched_images/').mkdir(parents=True, exist_ok=True)
+
+        with tf.device("/device:CPU:0"):
+            predictions = model.predict(test_X)
+        rounded = np.where(np.greater(predictions, 0.5), 1, 0)
+
+        def accuracy(y_pred, y):
+            return np.sum(y_pred == y)/len(y)
+
+        accuracy_test = accuracy(y_pred=rounded, y=test_y)
+        f1_score_test = f1_score(y_true=test_y, y_pred=rounded)
+
+        print(f"Accuracy on test: {accuracy_test}")
+        print(f"f1 on test: {f1_score_test}")
+
 
         # saving mean and std
         print('Saving params to ', train_metadata_filepath)
