@@ -4,27 +4,37 @@ import re
 from PIL import Image
 from utility import *
 import imageio as io
+from pathlib import Path
 
 def main():
     masked_train_path = "train/masked_train/"
     masked_test_path = "test/masked_test/"
+    mask_path = "train/mask/"
     label_path = "train/1st_manual/"
     patch_size = 32
     saved_path = "train/patched_images/"
     grid_path = "train/images_with_grid/"
     input_train_images = [item for item in os.listdir(masked_train_path) if re.search("_training", item)]
-    #input_test_images = [item for item in os.listdir(masked_test_path) if re.search("_test", item)]
-    mask_train_images = [item for item in os.listdir(label_path) if re.search("_manual1", item)]
+
+    # Create folders if they don't exist already
+    Path('train/patched_images/').mkdir(parents=True, exist_ok=True)
+    Path('train/images_with_grid/').mkdir(parents=True, exist_ok=True)
+
+    mask_train_images = [item for item in os.listdir(mask_path) if re.search("_training", item)]
+    label_train_images = [item for item in os.listdir(label_path) if re.search("manual", item)]
+
     for i, j in enumerate(input_train_images):
         image = io.imread(masked_train_path + j)
-        label_image = io.imread(label_path + mask_train_images[i])
+        mask_image = io.imread(mask_path + mask_train_images[i])
+        label_image = io.imread(label_path + label_train_images[i])
+        mask_mat = np.array(mask_image)
         label_mat = np.array(label_image)
         #prob_mat = np.zeros(np.array(image).shape, dtype=np.float32)
         prob_mat = np.array(image)
         image_mat = np.array(image)
         x_dim, y_dim, z_dim = prob_mat.shape
         #getting the two dimension where there is still eye
-        x, y = np.where(label_mat)
+        x, y = np.where(mask_mat)
         x_min = min(x)
         x_max = max(x)
         y_min = min(y)
@@ -62,8 +72,9 @@ def main():
                     label="no_vessel"
                     path_to_save = saved_path + "class_0/"
 
-                createAndSaveImage(toSave, saved_path + f"{label}_{m}_{n}_{j[:-3]}jpg")
-
+                # If you want to remove all the images which are totally black
+                if np.max(toSave) != 0:
+                    createAndSaveImage(toSave, saved_path + f"{label}_{m}_{n}_{j[:-3]}jpg")
 
         createAndSaveImage(prob_mat, grid_path + j)
         print("Patched generated")

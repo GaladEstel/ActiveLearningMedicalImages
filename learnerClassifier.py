@@ -107,7 +107,7 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
 
 #Decide if to train only the classifier (I know the labels and just see the accuracy
 #of the classifier or do the classifiationa and wait for the segmentation)
-def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteration):
+def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteration=5):
 
     #loading labelled patches
     unfiltered_filelist = getAllFiles(patch_dir)
@@ -200,17 +200,20 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
         # TODO: check if axis=0 is correct
         # np.abs(y - 0.5) is smaller the more y is closer to 0.5 (0.5 middle value between 0 and 1)
         most_uncertain_indeces = np.argsort(np.abs(test_y_pred - 0.5), axis=0)
-        most_uncertain_indeces = most_uncertain_indeces[:count_uncertain_values]
+        most_uncertain_indeces = most_uncertain_indeces[:count_uncertain_values].flatten()
 
         # Works until here
 
+        print(f"train_X.shape: {train_X.shape}")
+        print(f"test_X[most_uncertain_indeces, :, :, :].shape: {test_X[most_uncertain_indeces, :, :, :].shape}")
+
         # Get most uncertain values from test and add them into the train
-        train_X = train_X.append(test_X[most_uncertain_indeces])
-        train_y = train_y.append(test_y[most_uncertain_indeces])
+        train_X = np.vstack((train_X, test_X[most_uncertain_indeces, :, :, :]))
+        train_y = np.vstack((train_y, test_y[most_uncertain_indeces, :]))
 
         # remove most uncertain values from test
-        test_X = np.delete(test_X, most_uncertain_indeces)
-        test_y = np.delete(test_y, most_uncertain_indeces)
+        test_X = np.delete(test_X, most_uncertain_indeces, axis=0)
+        test_y = np.delete(test_y, most_uncertain_indeces, axis=0)
 
 
         #Then I compile again and train again the model
