@@ -14,7 +14,7 @@ import tensorflow as tf
 from keras import backend as K
 from verySimpleModel import *
 from sklearn.metrics import f1_score
-
+from sklearn.model_selection import train_test_split
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -112,36 +112,38 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
     #loading labelled patches
     unfiltered_filelist = getAllFiles(patch_dir)
     vessel_list = [item for item in unfiltered_filelist]
-    train_X = []
-    train_y = []
+    X = []
+    y = []
     for el, en in enumerate(vessel_list):
-        train_X.append(load_to_numpy(en))
+        X.append(load_to_numpy(en))
         if "no_vessel" in en:
-            train_y.append(0)
+            y.append(0)
         else:
-            train_y.append(1)
+            y.append(1)
     lb = LabelBinarizer()
-    train_y = lb.fit_transform(train_y)
-    train_X = np.array(train_X, dtype=np.float64)
-    print('Shape of train_X, train_y: ',train_X.shape, len(train_y))
+    y = lb.fit_transform(y)
+    X = np.array(X, dtype=np.float64)
+    print('Shape of X, y: ', X.shape, len(y))
+
+    # TODO: normalize only on training data
     # normalize training set
-    mean1 = np.mean(train_X)  # mean for data centering
-    std1 = np.std(train_X)  # std for data normalization
-    train_X -= mean1
-    train_X /= std1
+    mean1 = np.mean(X)  # mean for data centering
+    std1 = np.std(X)  # std for data normalization
+    X -= mean1
+    X /= std1
     # CREATING MODEL
     patch_size = 32
 
+    '''
     def get_n_indices(percentage):
         #extract a small dataset to give initial training
         initial_size = int(percentage*len(train_X))
         return np.random.randint(0, len(train_X), size=initial_size)
+    '''
 
-    initial_indices = get_n_indices(0.2)
-    all_indices = np.array([i for i in range(len(train_X))])
-
-    initial_train_X = train_X[initial_indices]
-    initial_train_y = train_y[initial_indices]
+    # TODO: set as a parameter
+    percentage_initial_training = 0.2
+    train_X ,test_X, train_y, test_y = train_test_split(X,y, train_size=percentage_initial_training, random_state=42)
     #~
 
     losses, val_losses, accuracies, val_accuracies = [], [], [], []
@@ -154,8 +156,8 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
     print("Starting to train... ")
     with tf.device("/device:CPU:0"):
         history = model.fit(
-            initial_train_X,
-            initial_train_y,
+            train_X,
+            train_y,
             batch_size=32,
             validation_split=0.2,
             epochs=20,
@@ -168,24 +170,18 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
         losses, val_losses, accuracies, val_accuracies, history
     )
 
-    training_indices = initial_indices
     #I should define the number of iteration I want to apply in which I ask for a percentage of images for which I'm uncertain
     for iteration in range(num_iteration):
-        not_training_indices = []
-        for el in all_indices:
-            if el not in training_indices:
-                not_training_indices.append(el)
-        test_X = train_X[not_training_indices]
-        test_y = train_y[not_training_indices]
         with tf.device("/device:CPU:0"):
-            predictions = model.predict(test_X)
-        rounded = np.where(np.greater(predictions, 0.5), 1, 0)
+            test_y_pred = model.predict(test_X)
+        test_y_pred_rounded = np.where(np.greater(test_y_pred, 0.5), 1, 0)
 
+        # TODO: put in util (or directly use sklearn function)
         def accuracy(y_pred, y):
             return np.sum(y_pred == y)/len(y)
 
-        accuracy_test = accuracy(y_pred=rounded, y=test_y)
-        f1_score_test = f1_score(y_true=test_y, y_pred=rounded)
+        accuracy_test = accuracy(y_pred=test_y_pred_rounded, y=test_y)
+        f1_score_test = f1_score(y_pred=test_y_pred_rounded, y_true=test_y)
 
         print(f"Accuracy on test: {accuracy_test}")
         print(f"f1 on test: {f1_score_test}")
@@ -201,7 +197,20 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
         # Uncertain values count fixed
         count_uncertain_values = 50 # TODO: to put as a parameter
 
-        training_indices += np.argmin()
+        # TODO: check if axis=0 is correct
+        # np.abs(y - 0.5) is smaller the more y is closer to 0.5 (0.5 middle value between 0 and 1)
+        most_uncertain_indeces = np.argsort(np.abs(test_y_pred - 0.5), axis=0)
+        most_uncertain_indeces = most_uncertain_indeces[:count_uncertain_values]
+
+        # Works until here
+
+        # Get most uncertain values from test and add them into the train
+        train_X = train_X.append(test_X[most_uncertain_indeces])
+        train_y = train_y.append(test_y[most_uncertain_indeces])
+
+        # remove most uncertain values from test
+        test_X = np.delete(test_X, most_uncertain_indeces)
+        test_y = np.delete(test_y, most_uncertain_indeces)
 
 
         #Then I compile again and train again the model
@@ -210,8 +219,8 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
                       metrics=['accuracy'])
         with tf.device("/device:CPU:0"):
             history = model.fit(
-                train_X[training_indices],
-                train_y[training_indices],
+                train_X,
+                train_y,
                 validation_split=0.2,
                 epochs=20,
                 callbacks=[
@@ -227,7 +236,7 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
         #Loading the best model from the training loop
         model = keras.models.load_model("Active_learning_model")
 
-    print("Test set evaluation: ", model.evaluate(train_X[~training_indices], verbose=0, return_dict=True),
+    print("Test set evaluation: ", model.evaluate(train_X, verbose=0, return_dict=True),
           )
     return model
 
