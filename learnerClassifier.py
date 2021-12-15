@@ -92,7 +92,7 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
         # model.fit(train_X, train_y, epochs=10)
 
         #GPU
-        model.fit(train_X, train_y, validation_split=0.2, epochs=10, batch_size=32)
+        model.fit(train_X, train_y, validation_split=0.2, epochs=20, batch_size=32)
         # saving model
         print('Saving model to ', model_filepath)
         model.save(model_filepath)
@@ -137,7 +137,7 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
         initial_size = int(percentage*len(train_X))
         return np.random.randint(0, len(train_X), size=initial_size)
 
-    initial_indices = get_n_indices(0.2)
+    initial_indices = get_n_indices(0.01)
     all_indices = np.array([i for i in range(len(train_X))])
 
     initial_train_X = train_X[initial_indices]
