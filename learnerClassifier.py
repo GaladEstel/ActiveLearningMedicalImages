@@ -15,6 +15,7 @@ from keras import backend as K
 from verySimpleModel import *
 from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
+from pathlib import Path
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -67,7 +68,7 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
     # CREATING MODEL
     patch_size = 32
 
-    model = get_very_simple_model(patch_size)
+    model = get_pnetcls(patch_size)
     '''
     DATA AUGMENTATION NOT WORKING
     # Create a data augmentation stage with horizontal flipping, rotations, zooms
@@ -81,10 +82,9 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
     train_X = tf.data.Dataset.from_tensor_slices(train_X, train_y)
     train_X = train_X.batch(16).map(lambda x, y: (data_augmentation(x), y))
     '''
-    with tf.device('/device:CPU:0'):
-        train_X = tf.convert_to_tensor(train_X)
-        train_y = tf.convert_to_tensor(train_y)
+    train_X, test_X, train_y, test_y = train_test_split(train_X, train_y, test_size=0.2, shuffle=True)
 
+    with tf.device('/device:CPU:0'):
         # train model
         print('Training model...')
 
@@ -92,14 +92,35 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
         # model.fit(train_X, train_y, epochs=10)
 
         #GPU
-        model.fit(train_X, train_y, validation_split=0.2, epochs=10, batch_size=32)
+        model.fit(train_X, train_y, validation_split=0.2, epochs=20, batch_size=32)
         # saving model
         print('Saving model to ', model_filepath)
         model.save(model_filepath)
+        # Create folders if they don't exist already
+        Path('train/patched_images/').mkdir(parents=True, exist_ok=True)
+
+        with tf.device("/device:CPU:0"):
+            predictions = model.predict(test_X)
+        rounded = np.where(np.greater(predictions, 0.5), 1, 0)
+
+        def accuracy(y_pred, y):
+            return np.sum(y_pred == y)/len(y)
+
+        accuracy_test = accuracy(y_pred=rounded, y=test_y)
+        f1_score_test = f1_score(y_true=test_y, y_pred=rounded)
+
+        print(f"Accuracy on test: {accuracy_test}")
+        print(f"f1 on test: {f1_score_test}")
+
+
         # saving mean and std
         print('Saving params to ', train_metadata_filepath)
         results = {'mean_train': mean1, 'std_train': std1}
-        with open(train_metadata_filepath, 'wb') as handle:
+
+        # Create folder if they don't exist already
+        Path(train_metadata_filepath).mkdir(parents=True, exist_ok=True)
+
+        with open(f"{train_metadata_filepath}/result.pkl", 'wb') as handle:
             pickle.dump(results, handle)
         print()
         print('DONE')
@@ -142,16 +163,17 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
     '''
 
     # TODO: set as a parameter
+    X, real_test_X, y, real_test_y = train_test_split(X, y, test_size=0.2, random_state=42)
     percentage_initial_training = 0.2
     train_X ,test_X, train_y, test_y = train_test_split(X,y, train_size=percentage_initial_training, random_state=42)
     #~
 
     losses, val_losses, accuracies, val_accuracies = [], [], [], []
 
-    model = get_very_simple_model(patch_size)
+    model = get_pnetcls(patch_size)
     checkpoint = keras.callbacks.ModelCheckpoint(
         "Active_learning_model", save_best_only=True, verbose=1)
-    early_stopping = keras.callbacks.EarlyStopping(patience=4, verbose=1)
+    early_stopping = keras.callbacks.EarlyStopping(patience=10, verbose=1)
 
     print("Starting to train... ")
     with tf.device("/device:CPU:0"):
@@ -174,7 +196,10 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
     for iteration in range(num_iteration):
         with tf.device("/device:CPU:0"):
             test_y_pred = model.predict(test_X)
+            real_test_y_pred = model.predict(real_test_X)
         test_y_pred_rounded = np.where(np.greater(test_y_pred, 0.5), 1, 0)
+
+        real_test_y_pred_rounded = np.where(np.greater(real_test_y_pred, 0.5), 1, 0)
 
         # TODO: put in util (or directly use sklearn function)
         def accuracy(y_pred, y):
@@ -185,6 +210,12 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
 
         print(f"Accuracy on test: {accuracy_test}")
         print(f"f1 on test: {f1_score_test}")
+
+        real_accuracy_test = accuracy(y_pred=real_test_y_pred_rounded, y=real_test_y)
+        real_f1_score_test = f1_score(y_pred=real_test_y_pred_rounded, y_true=real_test_y)
+
+        print(f"Real Accuracy on test: {real_accuracy_test}")
+        print(f"Real f1 on test: {real_f1_score_test}")
 
         #Make the magic, we should take the images to label essentially
 
@@ -228,7 +259,7 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
                 epochs=20,
                 callbacks=[
                     checkpoint,
-                    keras.callbacks.EarlyStopping(patience=4, verbose=1),
+                    keras.callbacks.EarlyStopping(patience=10, verbose=1),
                 ],
             )
 
@@ -236,8 +267,8 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
             losses, val_losses, accuracies, val_accuracies, history
         )
 
-        #Loading the best model from the training loop
-        model = keras.models.load_model("Active_learning_model")
+    #Loading the best model from the training loop
+    model = keras.models.load_model("Active_learning_model")
 
     print("Test set evaluation: ", model.evaluate(train_X, verbose=0, return_dict=True),
           )
