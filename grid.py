@@ -13,6 +13,7 @@ def main():
     label_path = "train/1st_manual/"
     patch_size = 32
     saved_path = "train/patched_images/"
+    saved_path_test = "train/patched_images_test/"
     grid_path = "train/images_with_grid/"
     input_train_images = [item for item in os.listdir(masked_train_path) if re.search("_training", item)]
 
@@ -72,9 +73,16 @@ def main():
                     label="no_vessel"
                     path_to_save = saved_path + "class_0/"
 
+
+
+
                 # If you want to remove all the images which are totally black
                 if np.max(toSave) != 0:
-                    createAndSaveImage(toSave, saved_path + f"{label}_{m}_{n}_{j[:-3]}jpg")
+                    if "37" in j or "38" in j or "39" in j or "40" in j:
+                        Path('train/patched_images_test/').mkdir(parents=True, exist_ok=True)
+                        createAndSaveImage(toSave, saved_path_test + f"{label}_{m}_{n}_{j[:-3]}jpg")
+                    else:
+                        createAndSaveImage(toSave, saved_path + f"{label}_{m}_{n}_{j[:-3]}jpg")
 
         createAndSaveImage(prob_mat, grid_path + j)
         print("Patched generated")

@@ -16,6 +16,8 @@ from verySimpleModel import *
 from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from pathlib import Path
+from sklearn.metrics import classification_report
+from scipy.stats import entropy
 
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
@@ -45,26 +47,31 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
 
     '''
 
+    def get_normalized_dataset(patch_dir):
+        unfiltered_filelist = getAllFiles(patch_dir)
+        vessel_list = [item for item in unfiltered_filelist]
+        train_X = []
+        train_y = []
+        for el, en in enumerate(vessel_list):
+            train_X.append(load_to_numpy(en))
+            if "no_vessel" in en:
+                train_y.append(0)
+            else:
+                train_y.append(1)
+        lb = LabelBinarizer()
+        train_y = lb.fit_transform(train_y)
+        train_X = np.array(train_X, dtype=np.float64)
+        print('Shape of train_X, train_y: ',train_X.shape, len(train_y))
+        # normalize training set
+        mean1 = np.mean(train_X)  # mean for data centering
+        std1 = np.std(train_X)  # std for data normalization
+        train_X -= mean1
+        train_X /= std1
 
-    unfiltered_filelist = getAllFiles(patch_dir)
-    vessel_list = [item for item in unfiltered_filelist]
-    train_X = []
-    train_y = []
-    for el, en in enumerate(vessel_list):
-        train_X.append(load_to_numpy(en))
-        if "no_vessel" in en:
-            train_y.append(0)
-        else:
-            train_y.append(1)
-    lb = LabelBinarizer()
-    train_y = lb.fit_transform(train_y)
-    train_X = np.array(train_X, dtype=np.float64)
-    print('Shape of train_X, train_y: ',train_X.shape, len(train_y))
-    # normalize training set
-    mean1 = np.mean(train_X)  # mean for data centering
-    std1 = np.std(train_X)  # std for data normalization
-    train_X -= mean1
-    train_X /= std1
+        return train_X, train_y
+
+    train_X, train_y = get_normalized_dataset(patch_dir)
+    test_X, test_y = get_normalized_dataset("train/patched_images_test/")
     # CREATING MODEL
     patch_size = 32
 
@@ -76,13 +83,11 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
         [
             layers.RandomFlip("horizontal"),
             layers.RandomRotation(0.1),
-            layers.RandomZoom(0.1),
         ]
     )
     train_X = tf.data.Dataset.from_tensor_slices(train_X, train_y)
     train_X = train_X.batch(16).map(lambda x, y: (data_augmentation(x), y))
     '''
-    train_X, test_X, train_y, test_y = train_test_split(train_X, train_y, test_size=0.2, shuffle=True)
 
     with tf.device('/device:CPU:0'):
         # train model
@@ -111,47 +116,49 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath):
 
         print(f"Accuracy on test: {accuracy_test}")
         print(f"f1 on test: {f1_score_test}")
-
+        print(classification_report(test_y, rounded))
 
         # saving mean and std
-        print('Saving params to ', train_metadata_filepath)
-        results = {'mean_train': mean1, 'std_train': std1}
+        #print('Saving params to ', train_metadata_filepath)
+        #results = {'mean_train': mean1, 'std_train': std1}
 
         # Create folder if they don't exist already
-        Path(train_metadata_filepath).mkdir(parents=True, exist_ok=True)
+        #Path(train_metadata_filepath).mkdir(parents=True, exist_ok=True)
 
-        with open(f"{train_metadata_filepath}/result.pkl", 'wb') as handle:
-            pickle.dump(results, handle)
+        #with open(f"{train_metadata_filepath}/result.pkl", 'wb') as handle:
+        #    pickle.dump(results, handle)
         print()
         print('DONE')
 
 
 #Decide if to train only the classifier (I know the labels and just see the accuracy
 #of the classifier or do the classifiationa and wait for the segmentation)
-def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteration=5):
+def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteration=5, metrics="least_confidence"):
+    def get_normalized_dataset(patch_dir):
+        unfiltered_filelist = getAllFiles(patch_dir)
+        vessel_list = [item for item in unfiltered_filelist]
+        train_X = []
+        train_y = []
+        for el, en in enumerate(vessel_list):
+            train_X.append(load_to_numpy(en))
+            if "no_vessel" in en:
+                train_y.append(0)
+            else:
+                train_y.append(1)
+        lb = LabelBinarizer()
+        train_y = lb.fit_transform(train_y)
+        train_X = np.array(train_X, dtype=np.float64)
+        print('Shape of train_X, train_y: ', train_X.shape, len(train_y))
+        # normalize training set
+        mean1 = np.mean(train_X)  # mean for data centering
+        std1 = np.std(train_X)  # std for data normalization
+        train_X -= mean1
+        train_X /= std1
 
-    #loading labelled patches
-    unfiltered_filelist = getAllFiles(patch_dir)
-    vessel_list = [item for item in unfiltered_filelist]
-    X = []
-    y = []
-    for el, en in enumerate(vessel_list):
-        X.append(load_to_numpy(en))
-        if "no_vessel" in en:
-            y.append(0)
-        else:
-            y.append(1)
-    lb = LabelBinarizer()
-    y = lb.fit_transform(y)
-    X = np.array(X, dtype=np.float64)
-    print('Shape of X, y: ', X.shape, len(y))
+        return train_X, train_y
 
-    # TODO: normalize only on training data
-    # normalize training set
-    mean1 = np.mean(X)  # mean for data centering
-    std1 = np.std(X)  # std for data normalization
-    X -= mean1
-    X /= std1
+    train_X, train_y = get_normalized_dataset(patch_dir)
+    real_test_X, real_test_y = get_normalized_dataset("/train/patched_images_test/")
     # CREATING MODEL
     patch_size = 32
 
@@ -163,9 +170,8 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
     '''
 
     # TODO: set as a parameter
-    X, real_test_X, y, real_test_y = train_test_split(X, y, test_size=0.2, random_state=42)
     percentage_initial_training = 0.2
-    train_X ,test_X, train_y, test_y = train_test_split(X,y, train_size=percentage_initial_training, random_state=42)
+    train_X ,test_X, train_y, test_y = train_test_split(train_X,train_y, train_size=percentage_initial_training, random_state=42)
     #~
 
     losses, val_losses, accuracies, val_accuracies = [], [], [], []
@@ -197,8 +203,9 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
         with tf.device("/device:CPU:0"):
             test_y_pred = model.predict(test_X)
             real_test_y_pred = model.predict(real_test_X)
-        test_y_pred_rounded = np.where(np.greater(test_y_pred, 0.5), 1, 0)
 
+
+        test_y_pred_rounded = np.where(np.greater(test_y_pred, 0.5), 1, 0)
         real_test_y_pred_rounded = np.where(np.greater(real_test_y_pred, 0.5), 1, 0)
 
         # TODO: put in util (or directly use sklearn function)
@@ -225,15 +232,20 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
         # uncertain_values = (np.abs(predictions - 0.5) <= 0.25)
 
 
+
         # Uncertain values count fixed
         count_uncertain_values = 50 # TODO: to put as a parameter
 
-        # TODO: check if axis=0 is correct
-        # np.abs(y - 0.5) is smaller the more y is closer to 0.5 (0.5 middle value between 0 and 1)
-        most_uncertain_indeces = np.argsort(np.abs(test_y_pred - 0.5), axis=0)
-        most_uncertain_indeces = most_uncertain_indeces[:count_uncertain_values].flatten()
+        if metrics=="least_confidence":
+            # TODO: check if axis=0 is correct
+            # np.abs(y - 0.5) is smaller the more y is closer to 0.5 (0.5 middle value between 0 and 1)
+            most_uncertain_indeces = np.argsort(np.abs(test_y_pred - 0.5), axis=0)
+            most_uncertain_indeces = most_uncertain_indeces[:count_uncertain_values].flatten()
 
-        # Works until here
+        elif metrics=="entropy":
+            # Entropy measurement
+            entropy_y = np.transpose(entropy(np.transpose(test_y_pred)))
+            most_uncertain_indeces = np.argpartition(-entropy_y, count_uncertain_values - 1, axis=0)[:count_uncertain_values]
 
         print(f"train_X.shape: {train_X.shape}")
         print(f"test_X[most_uncertain_indeces, :, :, :].shape: {test_X[most_uncertain_indeces, :, :, :].shape}")
@@ -259,13 +271,14 @@ def teach_model(patch_dir, model_filepath, train_metadata_filepath, num_iteratio
                 epochs=20,
                 callbacks=[
                     checkpoint,
-                    keras.callbacks.EarlyStopping(patience=10, verbose=1),
+                    keras.callbacks.EarlyStopping(patience=4, verbose=1),
                 ],
             )
 
         losses, val_losses, accuracies, val_accuracies = append_history(
             losses, val_losses, accuracies, val_accuracies, history
         )
+        model = get_pnetcls(patch_size)
 
     #Loading the best model from the training loop
     model = keras.models.load_model("Active_learning_model")
