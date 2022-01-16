@@ -46,12 +46,17 @@ def get_Xy(path, external_dataset):
     for el, en in enumerate(vessel_list):
         if external_dataset and not "no_vessel" in en: continue
         X.append(load_to_numpy(en))
+        if X[el].shape !=(32, 32, 3):
+            print("Ouuuu")
         if "no_vessel" in en:
             y.append(0)
         else:
             y.append(1)
     lb = LabelBinarizer()
-    X = np.array(X, dtype=np.float64)
+    try:
+        X = np.array(X, dtype=np.float64)
+    except:
+        print("Ciao")
     y = lb.fit_transform(y)
     return X, y
 
@@ -86,9 +91,9 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath, path
     # X, y origin dataset
     X, y = get_Xy(patch_dir, external_dataset=False)
     # Add images of external dataset
-    X_CD_no_vessel, y_CD_no_vessel = get_Xy(path_CD, external_dataset=True)
-    X = np.concatenate((X, X_CD_no_vessel))
-    y = np.concatenate((y, y_CD_no_vessel))
+    #X_CD_no_vessel, y_CD_no_vessel = get_Xy(path_CD, external_dataset=True)
+    #X = np.concatenate((X, X_CD_no_vessel))
+    #y = np.concatenate((y, y_CD_no_vessel))
     # X, y = random_under_sampling(X, y)
     X_train, y_train = shuffle_data(X,y)
     X_train, train_mean, train_std = normalize(X_train)
