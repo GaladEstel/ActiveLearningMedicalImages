@@ -51,7 +51,7 @@ def main():
                 patch_end_x = x_min + patch_size * (m + 1)
                 patch_start_y = y_min + patch_size * n
                 patch_end_y = y_min + patch_size * (n + 1)
-                #Modify the last patch in the row if it is out of bounds
+                # Modify the last patch in the row if it is out of bounds
                 if patch_end_x >= x_dim:
                     patch_end_x = x_max
                     patch_start_x = x_max - patch_size
@@ -63,9 +63,10 @@ def main():
 
                 to_overlap = int(patch_size / 2)
                 if patch_end_y + to_overlap >= y_dim:
-                    end_y=True
+                    end_y = True
                 if patch_end_x + to_overlap >= x_dim:
-                    end_x=True
+                    end_x = True
+
                 def saveOverlap(toSave, gridToSave, overlap):
 
                     # If you want to have the different patches (with and without vessels in different paths)
@@ -84,12 +85,12 @@ def main():
                         else:
                             createAndSaveImage(toSave, saved_path + f"{label}_{m}_{n}_{overlap}_{j[:-3]}jpg")
 
-
-
                 if end_x == False and end_y == False:
-                    overlapping_patch = image_mat[patch_start_x + to_overlap: patch_end_x + to_overlap, patch_start_y + to_overlap: patch_end_y + to_overlap]
-                    gridToSave = label_mat[patch_start_x + to_overlap: patch_end_x + to_overlap, patch_start_y + to_overlap: patch_end_y + to_overlap]
-                    if overlapping_patch.shape != (32, 32, 3) or gridToSave.shape !=(32, 32):
+                    overlapping_patch = image_mat[patch_start_x + to_overlap: patch_end_x + to_overlap,
+                                        patch_start_y + to_overlap: patch_end_y + to_overlap]
+                    gridToSave = label_mat[patch_start_x + to_overlap: patch_end_x + to_overlap,
+                                 patch_start_y + to_overlap: patch_end_y + to_overlap]
+                    if overlapping_patch.shape != (32, 32, 3) or gridToSave.shape != (32, 32):
                         print("Wut")
                     saveOverlap(overlapping_patch, gridToSave, "x_y_")
                 if end_x == False:
@@ -98,7 +99,7 @@ def main():
 
                     gridToSave = label_mat[patch_start_x + to_overlap: patch_end_x + to_overlap,
                                  patch_start_y: patch_end_y]
-                    if overlapping_patch.shape != (32, 32, 3) or gridToSave.shape !=(32, 32):
+                    if overlapping_patch.shape != (32, 32, 3) or gridToSave.shape != (32, 32):
                         print("Wut")
                     saveOverlap(overlapping_patch, gridToSave, "x_")
                 if end_y == False:
@@ -107,7 +108,7 @@ def main():
 
                     gridToSave = label_mat[patch_start_x: patch_end_x,
                                  patch_start_y + to_overlap: patch_end_y + to_overlap]
-                    if overlapping_patch.shape != (32, 32, 3) or gridToSave.shape !=(32, 32):
+                    if overlapping_patch.shape != (32, 32, 3) or gridToSave.shape != (32, 32):
                         print("Wut")
 
                     saveOverlap(overlapping_patch, gridToSave, "y_")
@@ -118,13 +119,12 @@ def main():
                 toSave = image_mat[patch_start_x: patch_end_x, patch_start_y:patch_end_y]
                 # I generate the labels to automatize the work of the oracle
                 gridToSave = label_mat[patch_start_x: patch_end_x, patch_start_y:patch_end_y]
-                if toSave.shape !=(32, 32, 3) or gridToSave.shape !=(32, 32):
+                if toSave.shape != (32, 32, 3) or gridToSave.shape != (32, 32):
                     print("bdbdbdb")
                 saveOverlap(toSave, gridToSave, "")
 
         createAndSaveImage(prob_mat, grid_path + j)
         print("Patches generated")
-
 
 
 if __name__ == "__main__":

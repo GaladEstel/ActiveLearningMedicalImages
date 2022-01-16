@@ -45,18 +45,14 @@ def get_Xy(path, external_dataset):
     y = []
     for el, en in enumerate(vessel_list):
         if external_dataset and not "no_vessel" in en: continue
+        # X.append(cv2.medianBlur(load_to_numpy(en),5))
         X.append(load_to_numpy(en))
-        if X[el].shape !=(32, 32, 3):
-            print("Ouuuu")
         if "no_vessel" in en:
             y.append(0)
         else:
             y.append(1)
     lb = LabelBinarizer()
-    try:
-        X = np.array(X, dtype=np.float64)
-    except:
-        print("Ciao")
+    X = np.array(X, dtype=np.float64)
     y = lb.fit_transform(y)
     return X, y
 
@@ -70,6 +66,22 @@ def random_under_sampling(X, y):
     indices_under_sampling = indices_non_vessels.tolist() + indices_vessels.tolist()
     return X[indices_under_sampling], y[indices_under_sampling]
 
+# use it to enlarge the dataset (in particular, the smallest class) by copying samples of that class
+def random_over_sampling(X, y):
+    y_vessels = y[y==1]
+    y_non_vessels = y[y==0]
+    difference = len(y_vessels) - len(y_non_vessels)
+    X_non_vessels = X[np.where(y==0)[0]]
+    X_to_add = X_non_vessels
+    for i in range(int(np.floor(difference / len(X_non_vessels)) - 1)):
+        X_to_add = np.concatenate((X_to_add, X_non_vessels))
+    len_remaining_samples_to_add = difference - len(X_to_add)
+    index_remaining_samples_to_add = np.random.choice(X_non_vessels.shape[0], len_remaining_samples_to_add)
+    X_to_add = np.concatenate((X_to_add, X_non_vessels[index_remaining_samples_to_add]))
+    y_to_add = np.array([0] * len(X_to_add))
+    X_over_sampled = np.concatenate((X,X_to_add))
+    y_over_sampled = np.concatenate((y,y_to_add.reshape(len(y_to_add),1)))
+    return X_over_sampled, y_over_sampled
 
 def normalize(X):
     train_mean = np.mean(X)  # mean for data centering
@@ -91,10 +103,11 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath, path
     # X, y origin dataset
     X, y = get_Xy(patch_dir, external_dataset=False)
     # Add images of external dataset
-    #X_CD_no_vessel, y_CD_no_vessel = get_Xy(path_CD, external_dataset=True)
-    #X = np.concatenate((X, X_CD_no_vessel))
-    #y = np.concatenate((y, y_CD_no_vessel))
+    # X_CD_no_vessel, y_CD_no_vessel = get_Xy(path_CD, external_dataset=True)
+    # X = np.concatenate((X, X_CD_no_vessel))
+    # y = np.concatenate((y, y_CD_no_vessel))
     # X, y = random_under_sampling(X, y)
+    # X, y = random_over_sampling(X, y)
     X_train, y_train = shuffle_data(X,y)
     X_train, train_mean, train_std = normalize(X_train)
     X_test, y_test = get_Xy(test_path, external_dataset=False)
@@ -120,7 +133,7 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath, path
         history = model.fit(
             X_train,
             y_train,
-            epochs=2,
+            epochs=20,
             batch_size=32,
             validation_split=0.2,
             callbacks=[
