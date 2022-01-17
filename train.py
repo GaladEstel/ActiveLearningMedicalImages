@@ -11,6 +11,8 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 from clustering import *
+from canny import *
+from reconstructor import *
 from scipy.stats import entropy
 
 
@@ -54,7 +56,7 @@ def get_Xy(path, external_dataset):
     lb = LabelBinarizer()
     X = np.array(X, dtype=np.float64)
     y = lb.fit_transform(y)
-    return X, y
+    return X, y, vessel_list
 
 
 # use it if you want to have a balanced (but smaller) training set and test set (test set to fix; it should remain unbalanced)
@@ -91,35 +93,49 @@ def normalize(X):
     return X, train_mean, train_std
 
 
-def shuffle_data(X,y):
+def shuffle_data(X,y, file_names):
     indices = np.array(range(len(y)))
     random.shuffle(indices)
-    return X[indices], y[indices]
+    file_names = np.array(file_names)
+    return X[indices], y[indices], file_names[indices]
 
 
 def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath, path_CD, test_path):
     train_size = 0.8
     np.random.seed(42)
-    # X, y origin dataset
-    X, y = get_Xy(patch_dir, external_dataset=False)
+    # X, y origin dataset + list of names of files (useful for reconstructing images at the end)
+    X, y, file_names_train = get_Xy(patch_dir, external_dataset=False)
     # Add images of external dataset
     # X_CD_no_vessel, y_CD_no_vessel = get_Xy(path_CD, external_dataset=True)
     # X = np.concatenate((X, X_CD_no_vessel))
     # y = np.concatenate((y, y_CD_no_vessel))
     # X, y = random_under_sampling(X, y)
     # X, y = random_over_sampling(X, y)
-    X_train, y_train = shuffle_data(X,y)
+    X_train, y_train, file_names_train = shuffle_data(X,y, file_names_train)
     X_train, train_mean, train_std = normalize(X_train)
-    X_test, y_test = get_Xy(test_path, external_dataset=False)
+    X_test, y_test, file_names_test = get_Xy(test_path, external_dataset=False)
     X_test -= train_mean
     X_test /= train_std
 
-
-    # I try KMeans
-    # for index,X_train_sample in enumerate(X_train):
-    #    kmeans(X_train_sample, y_train[index][0])
-
     patch_size = 32
+
+    # KMeans
+    # clustered_images = []
+    # for index, X_train_sample in enumerate(X_train):
+    #     clustered_images.append(kmeans(X_train_sample, y_train[index][0]))
+    # clustered_images = np.array(clustered_images)
+
+    # hough
+    canny_images = []
+    for index,X_train_sample in enumerate(X_train):
+       canny_images.append(canny(X_train_sample, y_train[index][0]))
+    canny_images = np.array(canny_images)
+
+    dataset_name = "STARE"
+    # reconstruct segmented image by patches - first (original) dataset - train images
+    reconstructed_images = reconstruct(canny_images, file_names_train, "train", dataset_name)
+
+
     # model = get_very_simple_model(patch_size)
     model = get_pnetcls(patch_size)
     # model = get_resnet(patch_size)

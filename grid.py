@@ -30,19 +30,19 @@ def main():
         label_image = io.imread(label_path + label_train_images[i])
         mask_mat = np.array(mask_image)
         label_mat = np.array(label_image)
-        #prob_mat = np.zeros(np.array(image).shape, dtype=np.float32)
+        # prob_mat = np.zeros(np.array(image).shape, dtype=np.float32)
         prob_mat = np.array(image)
         image_mat = np.array(image)
         x_dim, y_dim, z_dim = prob_mat.shape
-        #getting the two dimension where there is still eye
+        # getting the two dimension where there is still eye
         x, y = np.where(mask_mat)
         x_min = min(x)
         x_max = max(x)
         y_min = min(y)
         y_max = max(y)
-        #calculate the number of patches in x and y direction
-        num_of_x_patches = np.int(np.ceil((x_max - x_min)/patch_size))
-        num_of_y_patches = np.int(np.ceil((y_max - y_min)/patch_size))
+        # calculate the number of patches in x and y direction
+        num_of_x_patches = np.int(np.ceil((x_max - x_min) / patch_size))
+        num_of_y_patches = np.int(np.ceil((y_max - y_min) / patch_size))
         for m in range(num_of_x_patches):
             for n in range(num_of_y_patches):
                 end_x = False
