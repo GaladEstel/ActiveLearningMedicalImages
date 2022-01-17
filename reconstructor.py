@@ -16,7 +16,6 @@ def reconstruct(clustered_images, set, set_type, dataset_name):
             # pick the image id and the position
             data = []  # x,y,id
             file_name_extract = file_name.replace("_", " ")
-            file_name_extract = file_name_extract.replace(".", " ")
             for word in file_name_extract.split():
                 if word.isdigit(): data.append(int(word))
             ordered_patches[324 * (data[2]-21) + data[0]*18 + data[1]] = clustered_images[i]  # cv2.cvtColor(clustered_images[i], cv2.COLOR_RGB2GRAY)
@@ -36,7 +35,7 @@ def reconstruct(clustered_images, set, set_type, dataset_name):
             final_images[iter] = toAttachV
 
 
-        for image in final_images:
-            plt.imshow(image,"gray")
-            plt.show()
-        return ordered_patches
+        # for image in final_images:
+        #     plt.imshow(image,"gray")
+        #     plt.show()
+        return final_images

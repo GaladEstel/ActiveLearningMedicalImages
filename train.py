@@ -5,7 +5,9 @@ from Nets.pnet import *
 from Nets.verySimpleModel import *
 from Nets.resnet import *
 from Nets.vgg import *
+from Nets.wnetseg import *
 from utility import *
+from tensorflow.keras.optimizers import Adam
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
@@ -134,7 +136,7 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath, path
     dataset_name = "STARE"
     # reconstruct segmented image by patches - first (original) dataset - train images
     reconstructed_images = reconstruct(canny_images, file_names_train, "train", dataset_name)
-
+    return reconstructed_images
 
     # model = get_very_simple_model(patch_size)
     model = get_pnetcls(patch_size)
@@ -185,6 +187,8 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath, path
 
         print()
         print('DONE')
+
+        return reconstructed_images
 
 
 def train_active_learning(patch_dir, model_filepath, train_metadata_filepath, num_iterations, metrics="least_confidence"):
@@ -305,3 +309,48 @@ def train_active_learning(patch_dir, model_filepath, train_metadata_filepath, nu
 
     print("Test set evaluation: ", model.evaluate(X_train, verbose=0, return_dict=True))
     return model
+
+
+def segnet(train_input_path, labels):
+    unfiltered_filelist = getAllFiles(train_input_path)
+    vessel_list = [item for item in unfiltered_filelist]
+    images = []
+    for en in vessel_list:
+        images.append(cv2.cvtColor(cv2.imread(en), cv2.COLOR_RGB2GRAY))
+    X = np.array(images)
+
+    # drop 3 images which labels are totally black and 4 images that we use for test (TODO: fix them)
+    X = X[[2,3,4,5,6,7,8,9,10,11,12,13,15]]
+    labels = labels[[2,3,4,5,6,7,8,9,10,11,12,13,15]]
+    num_channels = 1
+    activation = 'relu'
+    final_activation = 'sigmoid'
+    optimizer = Adam
+    lr = 1e-4
+    dropout = 0.1
+    loss = 'categorical_crossentropy'
+    metrics = 'accuracy'
+    model = get_wnetseg(576, num_channels, activation, final_activation,
+                       optimizer, lr, dropout, loss, metrics)
+
+
+    history = model.fit(
+        X,
+        labels,
+        epochs=20,
+        batch_size=32,
+        validation_split=0.2,
+        callbacks=[
+            keras.callbacks.EarlyStopping(patience=5, verbose=1),
+            keras.callbacks.ModelCheckpoint(
+                "FullModelCheckpoint.h5", verbose=1, save_best_only=True
+            ),
+        ],
+    )
+
+    plot_history(
+        history.history["loss"],
+        history.history["val_loss"],
+        history.history["accuracy"],
+        history.history["val_accuracy"],
+    )
