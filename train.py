@@ -178,12 +178,12 @@ def train_whole_dataset(patch_dir, path_CD, test_path, use_second_dataset, metho
     if method == "kmeans":
         clustered_images = []
         for index, X_train_sample in enumerate(X_train):
-            clustered_images.append(kmeans(X_train_sample, y_train[index][0]))
+            clustered_images.append(kmeans(X_train_sample, y_train.squeeze()[index]))
         images_to_rec = np.array(clustered_images)
     else:
         canny_images = []
         for index, X_train_sample in enumerate(X_train):
-            canny_images.append(canny(X_train_sample, y_train[index][0]))
+            canny_images.append(canny(X_train_sample, y_train.squeeze()[index]))
         images_to_rec = np.array(canny_images)
 
     # reconstruct segmented image by patches
@@ -211,9 +211,16 @@ def shuffle_split_and_normalize(X,y,file_names, train_size):
     return X_train, X_test, y_train, y_test, file_names_train, file_names_test
 
 
-def train_active_learning(patch_dir, num_iterations, metrics, method):
+def train_active_learning(patch_dir, path_CD, num_iterations, metrics, use_second_dataset, method):
     np.random.seed(42)
     X, y, file_names = get_Xy(patch_dir, external_dataset=False)
+    if use_second_dataset:  # true if we want to add the second dataset
+        X_CD_no_vessel, y_CD_no_vessel, file_names_CD = get_Xy(path_CD, external_dataset=True)
+        # set file_names_CD to 0 since we will want to reconstruct original data only (i.e. we use this as a flag to ignore)
+        file_names_CD = np.zeros((len(file_names_CD),))
+        X = np.concatenate((X, X_CD_no_vessel))
+        y = np.concatenate((y, y_CD_no_vessel))
+        file_names = np.concatenate((file_names, file_names_CD))
     # X, y = random_under_sampling(X, y)
     # X, y = random_over_sampling(X, y)
     # We start with a 20% of the samples
@@ -332,6 +339,7 @@ def train_active_learning(patch_dir, num_iterations, metrics, method):
     # Now put together train and test and use pass them to kmeans/canny for segmentation
     X = np.concatenate((X_train, X_test))
     y = np.concatenate((y_train.squeeze(), model.predict(X_test).squeeze()))  # we generate predictions on the whole dataset -> we will use them in kmeans/canny
+    file_names = np.concatenate((file_names_train, file_names_test))
 
     # Choose either kmeans or canny method to get a first approximation of pixel-level labels.
     if method == "kmeans":
@@ -346,7 +354,7 @@ def train_active_learning(patch_dir, num_iterations, metrics, method):
         images_to_rec = np.array(canny_images)
 
     # reconstruct segmented image by patches
-    reconstructed_images = reconstruct(images_to_rec, file_names_train)
+    reconstructed_images = reconstruct(images_to_rec, file_names)
     return reconstructed_images
 
     # return the labels
