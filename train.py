@@ -17,7 +17,6 @@ from canny import *
 from reconstructor import *
 from scipy.stats import entropy
 
-
 def append_history(losses, val_losses, accuracy, val_accuracy, history):
     losses = losses + history.history["loss"]
     val_losses = val_losses + history.history["val_loss"]
@@ -127,13 +126,13 @@ def train_whole_dataset(patch_dir, path_CD, test_path, use_second_dataset, metho
     #       oracle (human expert). So, if you just want to exploit that annotations (at patch level) and passing them
     #       to the KMeans or to Canny methods, you can skip this CNN.
 
-    patch_size = 32
-    # Choose the model you want
+    # patch_size = 32
+    # # Choose the model you want
     # # model = get_very_simple_model(patch_size)
     # model = get_pnetcls(patch_size)
     # # model = get_resnet(patch_size)
     # # model = get_vgg(patch_size)
-    #
+    # #
     # with tf.device('/device:CPU:0'):
     #     print('Training model...')
     #     history = model.fit(
@@ -175,7 +174,7 @@ def train_whole_dataset(patch_dir, path_CD, test_path, use_second_dataset, metho
     #     print()
     #     print('DONE')
 
-    # Choose either KMean or Canny method to get a first approximation of pixel-level labels.
+    # Choose either kmeans or canny method to get a first approximation of pixel-level labels.
     if method == "kmeans":
         clustered_images = []
         for index, X_train_sample in enumerate(X_train):
@@ -187,29 +186,47 @@ def train_whole_dataset(patch_dir, path_CD, test_path, use_second_dataset, metho
             canny_images.append(canny(X_train_sample, y_train[index][0]))
         images_to_rec = np.array(canny_images)
 
-    dataset_name = "STARE"
-    # reconstruct segmented image by patches - first (original) dataset - train images
-    reconstructed_images = reconstruct(images_to_rec, file_names_train, "train", dataset_name)
+    # reconstruct segmented image by patches
+    reconstructed_images = reconstruct(images_to_rec, file_names_train)
     return reconstructed_images
 
+# used for active learning
+def shuffle_split_and_normalize(X,y,file_names, train_size):
+    indices = np.array(range(len(y)))
+    random.shuffle(indices)
+    indices_train = np.random.choice(len(y), size=int(train_size*len(y)),replace=False)
+    indices_test = np.setxor1d(indices, indices_train)
+    X_train = X[indices_train]
+    y_train = y[indices_train]
+    file_names_train = np.array(file_names)[indices_train]
+    X_test = X[indices_test]
+    y_test = y[indices_test]
+    file_names_test = np.array(file_names)[indices_test]
+    train_mean = np.mean(X_train)  # mean for data centering
+    train_std = np.std(X_train)  # std for data normalization
+    X_train -= train_mean
+    X_train /= train_std
+    X_test -= train_mean
+    X_test /= train_std
+    return X_train, X_test, y_train, y_test, file_names_train, file_names_test
 
-def train_active_learning(patch_dir, model_filepath, train_metadata_filepath, num_iterations, metrics="least_confidence"):
+
+def train_active_learning(patch_dir, num_iterations, metrics, method):
     np.random.seed(42)
-    X, y = get_Xy(patch_dir)
+    X, y, file_names = get_Xy(patch_dir, external_dataset=False)
     # X, y = random_under_sampling(X, y)
-    X, y = shuffle_data(X, y)
+    # X, y = random_over_sampling(X, y)
     # We start with a 20% of the samples
-    train_size = 0.2
-    X_train, X_test, y_train, y_test = split_and_normalize(X, y, train_size)
+    X_train, X_test, y_train, y_test, file_names_train, file_names_test = shuffle_split_and_normalize(X, y, file_names, train_size=0.2)
 
     # Creating lists for storing metrics
     losses, val_losses, accuracies, val_accuracies = [], [], [], []
 
     patch_size = 32
-    # model = get_very_simple_model(patch_size)
+    model = get_very_simple_model(patch_size)
     # model = get_pnetcls(patch_size)
     # model = get_resnet(patch_size)
-    model = get_vgg(patch_size)
+    # model = get_vgg(patch_size)
 
     print("Starting to train... ")
     with tf.device("/device:CPU:0"):
@@ -275,13 +292,14 @@ def train_active_learning(patch_dir, model_filepath, train_metadata_filepath, nu
         # Get most uncertain values from test and add them into the train
         X_train = np.vstack((X_train, X_test[most_uncertain_indeces, :, :, :]))
         y_train = np.vstack((y_train, y_test[most_uncertain_indeces, :]))
+        file_names_train = np.concatenate((file_names_train, file_names_test[most_uncertain_indeces]))
 
         # remove most uncertain values from test
         X_test = np.delete(X_test, most_uncertain_indeces, axis=0)
         y_test = np.delete(y_test, most_uncertain_indeces, axis=0)
+        file_names_test = np.delete(file_names_test, most_uncertain_indeces, axis=0)
 
         # Then I compile again and train again the model
-        model = get_very_simple_model(patch_size)
         model.compile(optimizer="SGD",
                       loss='binary_crossentropy',
                       metrics=['accuracy'])
@@ -307,9 +325,31 @@ def train_active_learning(patch_dir, model_filepath, train_metadata_filepath, nu
     # End of AL iterations
 
     # Loading the best model from the training loop
-    model = keras.models.load_model("ALModelCheckpoint")
+    model = keras.models.load_model("ALModelCheckpoint.h5")
 
     print("Test set evaluation: ", model.evaluate(X_train, verbose=0, return_dict=True))
+
+    # Now put together train and test and use pass them to kmeans/canny for segmentation
+    X = np.concatenate((X_train, X_test))
+    y = np.concatenate((y_train.squeeze(), model.predict(X_test).squeeze()))  # we generate predictions on the whole dataset -> we will use them in kmeans/canny
+
+    # Choose either kmeans or canny method to get a first approximation of pixel-level labels.
+    if method == "kmeans":
+        clustered_images = []
+        for index, X_train_sample in enumerate(X):
+            clustered_images.append(kmeans(X_train_sample, y[index]))
+        images_to_rec = np.array(clustered_images)
+    else:
+        canny_images = []
+        for index, X_train_sample in enumerate(X):
+            canny_images.append(canny(X_train_sample, y[index]))
+        images_to_rec = np.array(canny_images)
+
+    # reconstruct segmented image by patches
+    reconstructed_images = reconstruct(images_to_rec, file_names_train)
+    return reconstructed_images
+
+    # return the labels
     return model
 
 
@@ -333,6 +373,7 @@ def segnet(train_input_path, labels):
     dropout = 0.1
     loss = 'categorical_crossentropy'
     metrics = 'accuracy'
+    # pass patches to the model
     model = get_wnetseg(576, num_channels, activation, final_activation,
                         optimizer, lr, dropout, loss, metrics)
 
