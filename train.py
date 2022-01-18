@@ -102,15 +102,18 @@ def shuffle_data(X,y, file_names):
     return X[indices], y[indices], file_names[indices]
 
 
-def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath, path_CD, test_path):
-    train_size = 0.8
+def train_whole_dataset(patch_dir, path_CD, test_path, use_second_dataset, method):
     np.random.seed(42)
     # X, y origin dataset + list of names of files (useful for reconstructing images at the end)
     X, y, file_names_train = get_Xy(patch_dir, external_dataset=False)
-    # Add images of external dataset
-    # X_CD_no_vessel, y_CD_no_vessel = get_Xy(path_CD, external_dataset=True)
-    # X = np.concatenate((X, X_CD_no_vessel))
-    # y = np.concatenate((y, y_CD_no_vessel))
+    if use_second_dataset:  # true if we want to add the second dataset
+        X_CD_no_vessel, y_CD_no_vessel, file_names_CD = get_Xy(path_CD, external_dataset=True)
+        # set file_names_CD to 0 since we will want to reconstruct original data only (i.e. we use this as a flag to ignore)
+        file_names_CD = np.zeros((len(file_names_CD),))
+        X = np.concatenate((X, X_CD_no_vessel))
+        y = np.concatenate((y, y_CD_no_vessel))
+        file_names_train = np.concatenate((file_names_train, file_names_CD))
+    # Uncomment one of these if you want to try either undersampling or oversampling
     # X, y = random_under_sampling(X, y)
     # X, y = random_over_sampling(X, y)
     X_train, y_train, file_names_train = shuffle_data(X,y, file_names_train)
@@ -119,76 +122,75 @@ def train_whole_dataset(patch_dir, model_filepath, train_metadata_filepath, path
     X_test -= train_mean
     X_test /= train_std
 
+    # NOTE: training the whole dataset with the classification network was done to assess performances and comparing
+    #       them with active learning. Here we are simulating the case where we have all the labels thanks to the
+    #       oracle (human expert). So, if you just want to exploit that annotations (at patch level) and passing them
+    #       to the KMeans or to Canny methods, you can skip this CNN.
+
     patch_size = 32
+    # Choose the model you want
+    # # model = get_very_simple_model(patch_size)
+    # model = get_pnetcls(patch_size)
+    # # model = get_resnet(patch_size)
+    # # model = get_vgg(patch_size)
+    #
+    # with tf.device('/device:CPU:0'):
+    #     print('Training model...')
+    #     history = model.fit(
+    #         X_train,
+    #         y_train,
+    #         epochs=20,
+    #         batch_size=32,
+    #         validation_split=0.2,
+    #         callbacks=[
+    #             keras.callbacks.EarlyStopping(patience=5, verbose=1),
+    #             keras.callbacks.ModelCheckpoint(
+    #                 "FullModelCheckpoint.h5", verbose=1, save_best_only=True
+    #             ),
+    #         ],
+    #     )
+    #
+    #     plot_history(
+    #         history.history["loss"],
+    #         history.history["val_loss"],
+    #         history.history["accuracy"],
+    #         history.history["val_accuracy"],
+    #     )
+    #
+    #     with tf.device("/device:CPU:0"):
+    #         y_pred = model.predict(X_test)
+    #     y_pred_rounded = np.where(np.greater(y_pred, 0.5), 1, 0)
+    #
+    #     accuracy_score_test = accuracy_score(y_test, y_pred_rounded)
+    #     precision_score_test = precision_score(y_test, y_pred_rounded)
+    #     recall_score_test = recall_score(y_test, y_pred_rounded)
+    #     f1_score_test = f1_score(y_test, y_pred_rounded)
+    #
+    #     print(f"Accuracy on test: {accuracy_score_test}")
+    #     print(f"Precision on test: {precision_score_test}")
+    #     print(f"Recall on test: {recall_score_test}")
+    #     print(f"f1 on test: {f1_score_test}")
+    #     print(classification_report(y_test, y_pred_rounded))
+    #
+    #     print()
+    #     print('DONE')
 
-    # KMeans
-    # clustered_images = []
-    # for index, X_train_sample in enumerate(X_train):
-    #     clustered_images.append(kmeans(X_train_sample, y_train[index][0]))
-    # clustered_images = np.array(clustered_images)
-
-    # hough
-    canny_images = []
-    for index,X_train_sample in enumerate(X_train):
-       canny_images.append(canny(X_train_sample, y_train[index][0]))
-    canny_images = np.array(canny_images)
+    # Choose either KMean or Canny method to get a first approximation of pixel-level labels.
+    if method == "kmeans":
+        clustered_images = []
+        for index, X_train_sample in enumerate(X_train):
+            clustered_images.append(kmeans(X_train_sample, y_train[index][0]))
+        images_to_rec = np.array(clustered_images)
+    else:
+        canny_images = []
+        for index, X_train_sample in enumerate(X_train):
+            canny_images.append(canny(X_train_sample, y_train[index][0]))
+        images_to_rec = np.array(canny_images)
 
     dataset_name = "STARE"
     # reconstruct segmented image by patches - first (original) dataset - train images
-    reconstructed_images = reconstruct(canny_images, file_names_train, "train", dataset_name)
+    reconstructed_images = reconstruct(images_to_rec, file_names_train, "train", dataset_name)
     return reconstructed_images
-
-    # model = get_very_simple_model(patch_size)
-    model = get_pnetcls(patch_size)
-    # model = get_resnet(patch_size)
-    # model = get_vgg(patch_size)
-
-    with tf.device('/device:CPU:0'):
-        # train model
-        print('Training model...')
-        # define class weights - 0 is non vessels, 1 is vessels
-        # weights = {0:8, 1:1}
-        history = model.fit(
-            X_train,
-            y_train,
-            epochs=20,
-            batch_size=32,
-            validation_split=0.2,
-            callbacks=[
-                keras.callbacks.EarlyStopping(patience=5, verbose=1),
-                keras.callbacks.ModelCheckpoint(
-                    "FullModelCheckpoint.h5", verbose=1, save_best_only=True
-                ),
-            ],
-            # class_weight=weights,
-        )
-
-        plot_history(
-            history.history["loss"],
-            history.history["val_loss"],
-            history.history["accuracy"],
-            history.history["val_accuracy"],
-        )
-
-        with tf.device("/device:CPU:0"):
-            y_pred = model.predict(X_test)
-        y_pred_rounded = np.where(np.greater(y_pred, 0.5), 1, 0)
-
-        accuracy_score_test = accuracy_score(y_test, y_pred_rounded)
-        precision_score_test = precision_score(y_test, y_pred_rounded)
-        recall_score_test = recall_score(y_test, y_pred_rounded)
-        f1_score_test = f1_score(y_test, y_pred_rounded)
-
-        print(f"Accuracy on test: {accuracy_score_test}")
-        print(f"Precision on test: {precision_score_test}")
-        print(f"Recall on test: {recall_score_test}")
-        print(f"f1 on test: {f1_score_test}")
-        print(classification_report(y_test, y_pred_rounded))
-
-        print()
-        print('DONE')
-
-        return reconstructed_images
 
 
 def train_active_learning(patch_dir, model_filepath, train_metadata_filepath, num_iterations, metrics="least_confidence"):
@@ -319,8 +321,9 @@ def segnet(train_input_path, labels):
         images.append(cv2.cvtColor(cv2.imread(en), cv2.COLOR_RGB2GRAY))
     X = np.array(images)
 
-    # drop 3 images which labels are totally black and 4 images that we use for test (TODO: fix them)
-    X = X[[2,3,4,5,6,7,8,9,10,11,12,13,15]]
+    # drop 3 images which labels are totally black TODO: fix them
+    X_train = X[[2,3,4,5,6,7,8,9,10,11,12,13,15]]
+    X_test = X[[16,17,18,19]]
     labels = labels[[2,3,4,5,6,7,8,9,10,11,12,13,15]]
     num_channels = 1
     activation = 'relu'
@@ -331,22 +334,22 @@ def segnet(train_input_path, labels):
     loss = 'categorical_crossentropy'
     metrics = 'accuracy'
     model = get_wnetseg(576, num_channels, activation, final_activation,
-                       optimizer, lr, dropout, loss, metrics)
+                        optimizer, lr, dropout, loss, metrics)
 
-
-    history = model.fit(
-        X,
-        labels,
-        epochs=20,
-        batch_size=32,
-        validation_split=0.2,
-        callbacks=[
-            keras.callbacks.EarlyStopping(patience=5, verbose=1),
-            keras.callbacks.ModelCheckpoint(
-                "FullModelCheckpoint.h5", verbose=1, save_best_only=True
-            ),
-        ],
-    )
+    with tf.device("/device:CPU:0"):
+        history = model.fit(
+            X_train,
+            labels,
+            epochs=30,
+            batch_size=2,
+            validation_split=0.2,
+            callbacks=[
+                keras.callbacks.EarlyStopping(patience=5, verbose=1),
+                keras.callbacks.ModelCheckpoint(
+                    "FullModelCheckpoint.h5", verbose=1, save_best_only=True
+                ),
+            ],
+        )
 
     plot_history(
         history.history["loss"],
@@ -354,3 +357,16 @@ def segnet(train_input_path, labels):
         history.history["accuracy"],
         history.history["val_accuracy"],
     )
+
+    with tf.device("/device:CPU:0"):
+        y_pred = model.predict(X_test)
+
+    for i in range(4):
+        path1 = f"results/image{i}"
+        path2 = f"results/image{i}_white_and_black"
+        plt.imshow(y_pred[i].squeeze())
+        plt.savefig(path1)
+        plt.show()
+        plt.imshow(y_pred[i].squeeze(), "gray")
+        plt.savefig(path2)
+        plt.show()

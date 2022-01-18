@@ -13,6 +13,9 @@ def reconstruct(clustered_images, set, set_type, dataset_name):
         ordered_patches = np.zeros(shape)
         # we iterate over the patches name and we put the correspondant clustered image in the array of ordered patches
         for i,file_name in enumerate(set):
+            # if it is a data of the additional dataset we skip it -> we want to reconstruct original data only
+            if file_name == '0.0':
+                continue
             # pick the image id and the position
             data = []  # x,y,id
             file_name_extract = file_name.replace("_", " ")
@@ -35,7 +38,7 @@ def reconstruct(clustered_images, set, set_type, dataset_name):
             final_images[iter] = toAttachV
 
 
-        # for image in final_images:
-        #     plt.imshow(image,"gray")
-        #     plt.show()
+        for image in final_images:
+            plt.imshow(image,"gray")
+            plt.show()
         return final_images

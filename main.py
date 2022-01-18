@@ -8,13 +8,10 @@ def main():
     train_input_path = "train/patched_images/"
     train_CHASE_DB1_path = "CHASE_DB1/patched_images"
     test_path = "train/patched_images_test"
-    trained_model_path ="model"
-    trained_model_path_active = "modelActive"
-    results_whole_dataset = "./train/model/results.pkl"
-    results_active = "./train/model/resultsActive.pkl"
 
-    # get the labels for segmentation through CNN and KMeans/canny
-    labels = train.train_whole_dataset(train_input_path, trained_model_path, results_whole_dataset, train_CHASE_DB1_path, test_path)
+    # get the labels for segmentation through kmeans/canny and eventually an additional dataset
+    labels = train.train_whole_dataset(train_input_path, train_CHASE_DB1_path, test_path,
+                                       use_second_dataset=False, method="canny")
     # train.train_active_learning(train_input_path, trained_model_path_active, results_active, num_iterations=10)
     train.segnet(train_images_path, labels)
 
