@@ -121,10 +121,10 @@ def train_whole_dataset(patch_dir, path_CD, test_path, use_second_dataset, metho
     X_test -= train_mean
     X_test /= train_std
 
-    # NOTE: training the whole dataset with the classification network was done to assess performances and comparing
-    #       them with active learning. Here we are simulating the case where we have all the labels thanks to the
-    #       oracle (human expert). So, if you just want to exploit that annotations (at patch level) and passing them
-    #       to the KMeans or to Canny methods, you can skip this CNN.
+    ''' NOTE: training the whole dataset with the classification network was done to assess performances and comparing
+              them with active learning. Here we are simulating the case where we have all the labels thanks to the
+              oracle (human expert). So, if you just want to exploit that annotations (at patch level) and passing them
+              to the KMeans or to Canny methods, you can skip this CNN. '''
 
     # patch_size = 32
     # # Choose the model you want
@@ -211,7 +211,7 @@ def shuffle_split_and_normalize(X,y,file_names, train_size):
     return X_train, X_test, y_train, y_test, file_names_train, file_names_test
 
 
-def train_active_learning(patch_dir, path_CD, num_iterations, metrics, use_second_dataset, method):
+def train_active_learning(patch_dir, path_CD, test_path, num_iterations, metrics, use_second_dataset, method):
     np.random.seed(42)
     X, y, file_names = get_Xy(patch_dir, external_dataset=False)
     if use_second_dataset:  # true if we want to add the second dataset
@@ -225,6 +225,7 @@ def train_active_learning(patch_dir, path_CD, num_iterations, metrics, use_secon
     # X, y = random_over_sampling(X, y)
     # We start with a 20% of the samples
     X_train, X_test, y_train, y_test, file_names_train, file_names_test = shuffle_split_and_normalize(X, y, file_names, train_size=0.2)
+    X_test_final, y_test_final, _ = get_Xy(test_path, external_dataset=False)
 
     # Creating lists for storing metrics
     losses, val_losses, accuracies, val_accuracies = [], [], [], []
@@ -265,19 +266,19 @@ def train_active_learning(patch_dir, path_CD, num_iterations, metrics, use_secon
     #  Active Learning iterations
     for iteration in range(num_iterations):
         with tf.device("/device:CPU:0"):
-            y_pred = model.predict(X_test)
+            y_pred = model.predict(X_test_final)
         y_pred_rounded = np.where(np.greater(y_pred, 0.5), 1, 0)
 
-        accuracy_score_test = accuracy_score(y_test, y_pred_rounded)
-        precision_score_test = precision_score(y_test, y_pred_rounded)
-        recall_score_test = recall_score(y_test, y_pred_rounded)
-        f1_score_test = f1_score(y_test, y_pred_rounded)
+        accuracy_score_test = accuracy_score(y_test_final, y_pred_rounded)
+        precision_score_test = precision_score(y_test_final, y_pred_rounded)
+        recall_score_test = recall_score(y_test_final, y_pred_rounded)
+        f1_score_test = f1_score(y_test_final, y_pred_rounded)
 
         print(f"Accuracy on test: {accuracy_score_test}")
         print(f"Precision on test: {precision_score_test}")
         print(f"Recall on test: {recall_score_test}")
         print(f"f1 on test: {f1_score_test}")
-        print(classification_report(y_test, y_pred_rounded))
+        print(classification_report(y_test_final, y_pred_rounded))
 
         # Uncertain values count fixed
         count_uncertain_values = 50  # TODO: to put as a parameter
@@ -307,6 +308,7 @@ def train_active_learning(patch_dir, path_CD, num_iterations, metrics, use_secon
         file_names_test = np.delete(file_names_test, most_uncertain_indeces, axis=0)
 
         # Then I compile again and train again the model
+        model = get_very_simple_model(patch_size)
         model.compile(optimizer="SGD",
                       loss='binary_crossentropy',
                       metrics=['accuracy'])
@@ -334,7 +336,20 @@ def train_active_learning(patch_dir, path_CD, num_iterations, metrics, use_secon
     # Loading the best model from the training loop
     model = keras.models.load_model("ALModelCheckpoint.h5")
 
-    print("Test set evaluation: ", model.evaluate(X_train, verbose=0, return_dict=True))
+    with tf.device("/device:CPU:0"):
+        y_pred = model.predict(X_test_final)
+    y_pred_rounded = np.where(np.greater(y_pred, 0.5), 1, 0)
+
+    accuracy_score_test = accuracy_score(y_test_final, y_pred_rounded)
+    precision_score_test = precision_score(y_test_final, y_pred_rounded)
+    recall_score_test = recall_score(y_test_final, y_pred_rounded)
+    f1_score_test = f1_score(y_test_final, y_pred_rounded)
+
+    print(f"Accuracy on test: {accuracy_score_test}")
+    print(f"Precision on test: {precision_score_test}")
+    print(f"Recall on test: {recall_score_test}")
+    print(f"f1 on test: {f1_score_test}")
+    print(classification_report(y_test_final, y_pred_rounded))
 
     # Now put together train and test and use pass them to kmeans/canny for segmentation
     X = np.concatenate((X_train, X_test))
@@ -369,31 +384,30 @@ def segnet(train_input_path, labels):
         images.append(cv2.cvtColor(cv2.imread(en), cv2.COLOR_RGB2GRAY))
     X = np.array(images)
 
-    # drop 3 images which labels are totally black TODO: fix them
-    X_train = X[[2,3,4,5,6,7,8,9,10,11,12,13,15]]
-    X_test = X[[16,17,18,19]]
-    labels = labels[[2,3,4,5,6,7,8,9,10,11,12,13,15]]
+    # X_train = X[:16]
+    # X_test = X[16:]
+    # y_train = labels[:16]
+    X_train, X_test, y_train, y_test = extract_patches_seg(X, labels, train_input_path)
+
     num_channels = 1
     activation = 'relu'
     final_activation = 'sigmoid'
     optimizer = Adam
     lr = 1e-4
     dropout = 0.1
-    loss = 'categorical_crossentropy'
+    loss = dice_coef_loss
     metrics = 'accuracy'
-    # pass patches to the model
-    model = get_wnetseg(576, num_channels, activation, final_activation,
+    model = get_wnetseg(32, num_channels, activation, final_activation,
                         optimizer, lr, dropout, loss, metrics)
 
     with tf.device("/device:CPU:0"):
         history = model.fit(
             X_train,
-            labels,
-            epochs=30,
-            batch_size=2,
+            y_train,
+            epochs=1,
+            batch_size=320,
             validation_split=0.2,
             callbacks=[
-                keras.callbacks.EarlyStopping(patience=5, verbose=1),
                 keras.callbacks.ModelCheckpoint(
                     "FullModelCheckpoint.h5", verbose=1, save_best_only=True
                 ),
@@ -410,12 +424,83 @@ def segnet(train_input_path, labels):
     with tf.device("/device:CPU:0"):
         y_pred = model.predict(X_test)
 
+    dice_coef_score = dice_coef(y_test.astype(np.float32), y_pred.squeeze().astype(np.float32))
+
+    print(f"Dice coefficient: {keras.backend.eval(dice_coef_score)}")
+
+    y_pred_rec = reconstruct_images_from_patches(y_pred.squeeze())
+
     for i in range(4):
         path1 = f"results/image{i}"
         path2 = f"results/image{i}_white_and_black"
-        plt.imshow(y_pred[i].squeeze())
+        plt.imshow(y_pred_rec[i].squeeze())
         plt.savefig(path1)
         plt.show()
-        plt.imshow(y_pred[i].squeeze(), "gray")
+        plt.imshow(y_pred_rec[i].squeeze(), "gray")
         plt.savefig(path2)
         plt.show()
+
+
+def extract_patches_seg(X, labels, path):
+
+    X_train = np.empty((361 * 16, 32, 32))
+    X_test = np.empty((361 * 4, 32, 32))
+    y_train = np.empty((361 * 16, 32, 32))
+    num_of_x_patches = 19
+    num_of_y_patches = 19
+    patch_size = 32
+
+    for i,image in enumerate(X[:16]):
+        for m in range(num_of_x_patches):
+            for n in range(num_of_y_patches):
+                patch_start_x = patch_size * m
+                patch_end_x = patch_size * (m + 1)
+                patch_start_y = patch_size * n
+                patch_end_y = patch_size * (n + 1)
+                if i == 0 and m == 0 and n == 0:
+                    X_train[0] = image[patch_start_x: patch_end_x, patch_start_y: patch_end_y]
+                    y_train[0] = labels[i][patch_start_x: patch_end_x, patch_start_y: patch_end_y]
+                else:
+                    X_train[361*i + m*19 + n] = image[patch_start_x: patch_end_x, patch_start_y: patch_end_y]
+                    y_train[361*i + m*19 + n] = labels[i][patch_start_x: patch_end_x, patch_start_y: patch_end_y]
+
+    unfiltered_filelist = getAllFiles(path)
+    labels = np.empty((4, 608, 608))
+    for i in range(4):
+        labels[-i-1] = cv2.cvtColor(cv2.imread(unfiltered_filelist[-i-1]) , cv2.COLOR_BGR2GRAY)
+
+    y_test = np.empty((361 * 4, 32, 32))
+
+    for i,image in enumerate(X[:4]):
+        for m in range(num_of_x_patches):
+            for n in range(num_of_y_patches):
+                patch_start_x = patch_size * m
+                patch_end_x = patch_size * (m + 1)
+                patch_start_y = patch_size * n
+                patch_end_y = patch_size * (n + 1)
+                if i == 0 and m == 0 and n == 0:
+                    X_test[0] = image[patch_start_x: patch_end_x, patch_start_y: patch_end_y]
+                    y_test[0] = labels[i][patch_start_x: patch_end_x, patch_start_y: patch_end_y]
+                else:
+                    X_test[361*i + m*19 + n] = image[patch_start_x: patch_end_x, patch_start_y: patch_end_y]
+                    y_test[361*i + m*19 + n] = labels[i][patch_start_x: patch_end_x, patch_start_y: patch_end_y]
+
+    return X_train, X_test, y_train, y_test
+
+
+def reconstruct_images_from_patches(images):
+    final_images = np.zeros((4, 608, 608))  # 4 images 608x608
+    for iteration in range(4):
+        for i in range(19):  # along the rows
+            for j in range(19):  # along the columns
+                if j == 0:
+                    toAttachH = images[iteration * 361 + i * 19 + j]
+                else:
+                    toAttachH = np.hstack((toAttachH, images[iteration * 361 + i * 19 + j]))
+            if i == 0:
+                toAttachV = toAttachH
+            else:
+                toAttachV = np.vstack((toAttachV, toAttachH))
+        final_images[iteration] = toAttachV
+
+    return final_images

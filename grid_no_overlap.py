@@ -36,14 +36,10 @@ def main():
         x_dim, y_dim, z_dim = prob_mat.shape
         # getting the two dimension where there is still eye
         x, y = np.where(mask_mat)
-        # x_min = min(x)
-        # x_max = max(x)
-        # y_min = min(y)
-        # y_max = max(y)
-        x_min = 0
-        x_max = 575
-        y_min = 0
-        y_max = 575
+        x_min = min(x)
+        x_max = max(x)
+        y_min = min(y)
+        y_max = max(y)
         # calculate the number of patches in x and y direction
         num_of_x_patches = np.int(np.ceil((x_max - x_min)/patch_size))
         num_of_y_patches = np.int(np.ceil((y_max - y_min)/patch_size))

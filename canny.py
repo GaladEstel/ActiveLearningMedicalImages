@@ -50,8 +50,8 @@ def canny(patch_image, prediction):
         result_image[:,:] = 0  # mask it since it is no-vessel
         result_image_final = result_image.copy()
 
-
-
+    return result_image_final
+    #
     # # KMeans
     # vectorized = np.float32(norm_image.reshape((-1, 3)))
     # criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
@@ -82,9 +82,9 @@ def canny(patch_image, prediction):
     # result_image = res.reshape(norm_image.shape)
     #
     #
-    # #plt.imshow(edges,"gray")
+    # # plt.imshow(edges,"gray")
     #
-    # Plot
+    # # Plot
     # figure_size = 15
     # plt.figure(figsize=(figure_size, figure_size))
     # plt.subplot(1, 2, 1), \
@@ -96,10 +96,11 @@ def canny(patch_image, prediction):
     # plt.title(f'Segmented Image when K = {K} - {prediction}')
     # plt.xticks([]), plt.yticks([])
     # plt.subplot(1, 2, 2)
-    # plt.imshow(result_image_final, "gray")
+    # plt.imshow(gray_norm_image, "gray")
     # plt.title(f'Edges image - ' + prediction)
     # plt.xticks([]), plt.yticks([])
     #
     # plt.show()
+    #
+    # return result_image_final
 
-    return result_image_final
